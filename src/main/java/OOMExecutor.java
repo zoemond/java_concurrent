@@ -10,7 +10,7 @@ public class OOMExecutor {
         OOMExecutor tester = new OOMExecutor();
         tester.detectLimitByteSize(b -> {
         });
-        tester.threadOOM();
+        tester.divideMemoryToPerThread();
     }
 
     void detectLimitByteSize(Consumer<Long> perLoopConsumer) {
@@ -18,7 +18,7 @@ public class OOMExecutor {
         long byteSum = 0;
         try {
             while (true) {
-                int byteMemory = 1024 * 1024;
+                int byteMemory = 1024 * 1024 * 100;
                 buffers.add(new byte[byteMemory]);
                 byteSum += byteMemory;
 
@@ -31,13 +31,14 @@ public class OOMExecutor {
         }
     }
 
-    // 1つのTreadPoolServiceだとメモリが圧迫されて他のスレッドがブロックされて進まないこと
-    void threadOOM() {
+    // 各Threadで確保したByteの合計がtotalMemoryを超えるあたりでOOMになることがわかる.
+    // 一つのThreadがOOMで終了すると残りのThreadはtotalMemoryを超えるまで動き続ける.
+    void divideMemoryToPerThread() {
         ExecutorService service = Executors.newFixedThreadPool(2);
 
         Runnable detectLimitByteSize = () -> {
-            detectLimitByteSize(b -> {
-                System.out.println("zzz..." + Thread.currentThread().getName());
+            detectLimitByteSize(sum -> {
+                System.out.println("zzz..." + Thread.currentThread().getName() + ", " + sum);
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException e) {
