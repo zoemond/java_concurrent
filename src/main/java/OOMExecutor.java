@@ -6,11 +6,20 @@ import java.util.function.Consumer;
 
 public class OOMExecutor {
 
+    void sleep(int seconds) {
+        try {
+            Thread.sleep(1000 * seconds);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public static void main(String[] args) {
         OOMExecutor tester = new OOMExecutor();
-        tester.allocateMemoryStepByStep(b -> {
-        });
-        tester.allocateMemoryPerThread();
+//        tester.allocateMemoryStepByStep(b -> {
+//        });
+//        tester.allocateMemoryPerThread();
+        tester.blockThreadWithBigMemory();
     }
 
     // byteSum が totalMemory を超えるあたりで[OutOfMemoryError: Java heap space]になることがわかる
@@ -31,22 +40,54 @@ public class OOMExecutor {
         }
     }
 
+    Runnable allocateMemoryWileSleeping(int seconds) {
+        return () -> {
+            allocateMemoryStepByStep(sum -> {
+                System.out.println("zzz..." + Thread.currentThread().getName() + ", " + sum);
+                sleep(seconds);
+            });
+        };
+    }
+
     // 各Threadで確保したByteの合計がtotalMemoryを超えるあたりでOOMになることがわかる.
     // 一つのThreadがOOMで終了すると残りのThreadはtotalMemoryを超えるまで動き続ける.
     void allocateMemoryPerThread() {
         ExecutorService service = Executors.newFixedThreadPool(2);
+        service.execute(allocateMemoryWileSleeping(1));
+        service.execute(allocateMemoryWileSleeping(1));
+    }
 
-        Runnable allocateMemoryWileSleeping = () -> {
-            allocateMemoryStepByStep(sum -> {
-                System.out.println("zzz..." + Thread.currentThread().getName() + ", " + sum);
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            });
-        };
-        service.execute(allocateMemoryWileSleeping);
-        service.execute(allocateMemoryWileSleeping);
+
+    // 1つのTreadPoolServiceだとメモリが圧迫されて他のスレッドがブロックされて進まないこと
+    void blockThreadWithBigMemory() {
+        long totalMemory = Runtime.getRuntime().totalMemory();
+        long smallMemory = totalMemory;
+        long bigMemory = totalMemory;
+
+        ExecutorService service = Executors.newFixedThreadPool(2);
+        service.execute(() -> {
+            while (true) {
+                System.out.print(Thread.currentThread().getName() + ", ");
+                allocateMemory((int) bigMemory, 10);
+            }
+        });
+        service.execute(() -> {
+            while (true) {
+                System.out.print(Thread.currentThread().getName() + ", ");
+                allocateMemory((int) smallMemory, 1);
+            }
+        });
+    }
+
+    void allocateMemory(int byteSize, int sleepSeconds) {
+        List<byte[]> buffers = new ArrayList<>();
+        buffers.add(new byte[byteSize]);
+        sleep(sleepSeconds);
+        System.out.println("byteMemory: " + byteSize + ", buffer size: " + buffers.size());
+    }
+
+    // 別々のTreadPoolServiceだとメモリが圧迫されても他の片方のThreadPoolServiceのスレッドは動くこと
+    void nonBlockThreadWithBigMemory() {
+
     }
 }
