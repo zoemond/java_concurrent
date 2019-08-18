@@ -8,12 +8,13 @@ public class OOMExecutor {
 
     public static void main(String[] args) {
         OOMExecutor tester = new OOMExecutor();
-        tester.detectLimitByteSize(b -> {
+        tester.allocateMemoryStepByStep(b -> {
         });
-        tester.divideMemoryToPerThread();
+        tester.allocateMemoryPerThread();
     }
 
-    void detectLimitByteSize(Consumer<Long> perLoopConsumer) {
+    // byteSum が totalMemory を超えるあたりで[OutOfMemoryError: Java heap space]になることがわかる
+    void allocateMemoryStepByStep(Consumer<Long> perLoopConsumer) {
         List<byte[]> buffers = new ArrayList<>();
         long byteSum = 0;
         try {
@@ -25,7 +26,6 @@ public class OOMExecutor {
                 perLoopConsumer.accept(byteSum);
             }
         } catch (OutOfMemoryError e) {
-            System.out.println("byteSum が totalMemory を超えるあたりで[OutOfMemoryError: Java heap space]になることがわかる");
             // freeMemory() > 0 でもOutOfMemoryになる. 理由は不明.
             System.out.println("totalMemory: " + Runtime.getRuntime().totalMemory() + ", byteSum: " + byteSum);
         }
@@ -33,11 +33,11 @@ public class OOMExecutor {
 
     // 各Threadで確保したByteの合計がtotalMemoryを超えるあたりでOOMになることがわかる.
     // 一つのThreadがOOMで終了すると残りのThreadはtotalMemoryを超えるまで動き続ける.
-    void divideMemoryToPerThread() {
+    void allocateMemoryPerThread() {
         ExecutorService service = Executors.newFixedThreadPool(2);
 
-        Runnable detectLimitByteSize = () -> {
-            detectLimitByteSize(sum -> {
+        Runnable allocateMemoryWileSleeping = () -> {
+            allocateMemoryStepByStep(sum -> {
                 System.out.println("zzz..." + Thread.currentThread().getName() + ", " + sum);
                 try {
                     Thread.sleep(1000);
@@ -46,7 +46,7 @@ public class OOMExecutor {
                 }
             });
         };
-        service.execute(detectLimitByteSize);
-        service.execute(detectLimitByteSize);
+        service.execute(allocateMemoryWileSleeping);
+        service.execute(allocateMemoryWileSleeping);
     }
 }
